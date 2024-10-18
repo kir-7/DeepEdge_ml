@@ -70,7 +70,6 @@ class CLIPAnalyzer:
     
     def analyze(self, image, texts):
         
-        image = np.array(image)
 
         inputs = self.processor(text=texts, images=image, return_tensors="pt", padding=True).to(self.device)
         
@@ -105,9 +104,8 @@ class SegmentModel:
 
 
 
-    def generate(self, image_pil, roi=None):
+    def generate(self, image_rgb, roi=None):
 
-        image_rgb = np.array(image_pil)
         input_points, input_boxes = [], []
         if roi != None :
             for region in roi:

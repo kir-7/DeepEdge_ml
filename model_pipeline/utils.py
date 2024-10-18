@@ -3,6 +3,9 @@ import numpy as np
 import cv2
 from shapely.geometry import Polygon
 
+from io import BytesIO
+from PIL import Image
+
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
@@ -75,7 +78,7 @@ def show_points(coords, labels, ax, marker_size=375):
     ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
 
 
-def show_masks_on_image(raw_image, masks, scores):
+def show_masks_on_image(raw_image, masks, scores, return_pil=False):
     if len(masks.shape) == 4:
       masks = masks.squeeze()
     if scores.shape[0] == 1:
@@ -90,8 +93,28 @@ def show_masks_on_image(raw_image, masks, scores):
       show_mask(mask, axes[i])
       axes[i].title.set_text(f"Mask {i+1}, Score: {score.item():.3f}")
       axes[i].axis("off")
+    
+    if return_pil:
+        img_buf = BytesIO()
+        plt.savefig(img_buf, format='png')
+        im = Image.open(img_buf)
+        return im
+    
     plt.show()
+  
+def get_masked_area(image, masks):
+    if len(masks.shape) == 4:
+        masks = masks.squeeze()
 
+    images = []
+
+    for mask in masks:
+      binary_mask = Image.fromarray((mask * 255).astype(np.uint8))  # Convert boolean to binary image
+      result = Image.composite(image, Image.new('RGB', image.size), binary_mask)
+
+      images.append(result)
+    
+    return images   
 
 def masks_to_polygons(masks, scores, threshold=0.5):
 

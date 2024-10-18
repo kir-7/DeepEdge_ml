@@ -4,10 +4,15 @@ from torch import nn
 import torchvision
 
 import numpy as np
-
+from PIL import Image
 
 from model_pipeline.models import CLIPAnalyzer, SegmentModel,  StableDiffusion
-from model_pipeline.utils import masks_to_polygons, extract_pixels
+from model_pipeline.utils import masks_to_polygons, extract_pixels, get_masked_area
+
+from config import SAVE_PATH
+
+import base64
+from io import BytesIO
 
 
 '''
@@ -33,21 +38,81 @@ Problems: 1. for SegmentModel it requires to return the mask as well as polygon,
 
           3. Need to properly integrate the CPU and GPU environments as it suggests, probably better to create a Environment class that 
              handles all imports and devices setting downloading the models (think !!).
+        
+          4. How should the pipeline take the roi for sam and texts for clip as inputs will these provided by the user during he api 
+             requets or should a frontend be built where the user directly interacts with the model
+              
                            
 '''
 
 class Pipleline:
-    def __init__(self, difusion, clip, segment, device) -> None:
-        pass
+    def __init__(self, save_path=SAVE_PATH, device='cpu') -> None:
+        
 
-    def generate(self):
-        pass
+        print("loading pretrained models from huggingface...")
+        self.diffusion = StableDiffusion(device=device)
+        self.clip = CLIPAnalyzer(device=device)
+        self.segment = SegmentModel(device=device)
+        print(end='\r')
+        print("models loaded.")
 
-    def analyze(self):
-        pass
+        self.device = device
+        self.save = save_path
 
-    def load(self):
-        pass
+        self.image = None
+        self.confidence_scores = None
+        self.iou_scores = None
+        self.masks = None
 
-    def define(self):
-        pass
+    def generate(self, prompt):
+        
+        self.image = self.diffusion.generate(prompt)
+        
+        buffered = BytesIO()
+        self.image.save(buffered, format="JPEG")
+        base_64_encoded_image = base64.b64encode(buffered.getvalue())
+
+        self.image = np.array(self.image)
+
+        return base_64_encoded_image
+
+    def analyze_clip(self, image, texts):
+        
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        
+        assert isinstance(image, np.ndarray) 
+
+        if isinstance(texts, str):
+            self.probs = self.clip.analyze(image, [texts])
+
+        if isinstance(texts, list) and len(texts)>0:
+            self.probs = self.clip.analyze(image, texts)
+
+        self.probs.detach().cpu()
+
+        return torch.max(self.probs), self.probs
+
+    def analyze_sam(self, image, roi):
+
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        
+        assert isinstance(image, np.ndarray) 
+
+        self.masks, self.iou_scores = self.segment.generate(image, roi)
+
+        masked_images = get_masked_area(image, self.masks)
+
+        return self.mask, self.iou_scores, masked_images
+
+
+    def __call__(self, prompt, texts, roi):
+
+        image = self.generate(prompt)
+
+        max_prob, probs = self.analyze_clip(image, texts)
+
+        masks, iou_scores, polygons = self.analyze_sam(image, roi)
+
+        return image, probs, masks, iou_scores, polygons
