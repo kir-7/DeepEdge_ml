@@ -16,6 +16,7 @@ my_pipeline/
 ├── config.py                # Configuration settings (e.g., model paths, device settings)
 ├── main.py                  # Entry point for running the pipeline (optional)
 └── README.md                # Project documentation
+├── test.py                  # a file to test the functionality of the api 
 
 main the entry point for running the application or running the pipeline independently from the API.
 app.py is the point from where the api will run

@@ -44,7 +44,7 @@ Problems: 1. for SegmentModel it requires to return the mask as well as polygon,
                            
 '''
 
-class Pipleline:
+class Pipeline:
     def __init__(self, diffusion=None, clip=None, segment=None, save_path=SAVE_PATH, device='cpu') -> None:
         
         print("loading pretrained models from huggingface...")
