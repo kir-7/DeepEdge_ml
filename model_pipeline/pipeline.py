@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 from model_pipeline.models import CLIPAnalyzer, SegmentModel,  StableDiffusion
-from model_pipeline.utils import masks_to_polygons, extract_pixels, get_masked_area
+from model_pipeline.utils import masks_to_polygons, extract_pixels, get_masked_area, encode_images
 
 from config import SAVE_PATH
 
@@ -41,18 +41,27 @@ Problems: 1. for SegmentModel it requires to return the mask as well as polygon,
         
           4. How should the pipeline take the roi for sam and texts for clip as inputs will these provided by the user during he api 
              requets or should a frontend be built where the user directly interacts with the model
-              
                            
 '''
 
 class Pipleline:
-    def __init__(self, save_path=SAVE_PATH, device='cpu') -> None:
+    def __init__(self, diffusion=None, clip=None, segment=None, save_path=SAVE_PATH, device='cpu') -> None:
         
-
         print("loading pretrained models from huggingface...")
-        self.diffusion = StableDiffusion(device=device)
-        self.clip = CLIPAnalyzer(device=device)
-        self.segment = SegmentModel(device=device)
+
+        if not diffusion:
+            self.diffusion = StableDiffusion(device=device)
+        else:
+            self.diffusion = diffusion
+        if not clip:
+            self.clip = CLIPAnalyzer(device=device)
+        else:
+            self.clip = clip
+        if not segment:
+            self.segment = SegmentModel(device=device)
+        else:
+            self.segment = segment
+
         print(end='\r')
         print("models loaded.")
 
@@ -68,13 +77,11 @@ class Pipleline:
         
         self.image = self.diffusion.generate(prompt)
         
-        buffered = BytesIO()
-        self.image.save(buffered, format="JPEG")
-        base_64_encoded_image = base64.b64encode(buffered.getvalue())
+        encoded_image = encode_images(self.image)
 
         self.image = np.array(self.image)
 
-        return base_64_encoded_image
+        return encoded_image
 
     def analyze_clip(self, image, texts):
         
@@ -89,8 +96,6 @@ class Pipleline:
         if isinstance(texts, list) and len(texts)>0:
             self.probs = self.clip.analyze(image, texts)
 
-        self.probs.detach().cpu()
-
         return torch.max(self.probs), self.probs
 
     def analyze_sam(self, image, roi):
@@ -102,9 +107,10 @@ class Pipleline:
 
         self.masks, self.iou_scores = self.segment.generate(image, roi)
 
-        masked_images = get_masked_area(image, self.masks)
+        masked_images = get_masked_area(image, np.array(self.masks))
+        encoded_masked_images = encode_images(masked_images)
 
-        return self.mask, self.iou_scores, masked_images
+        return self.mask, self.iou_scores, encoded_masked_images
 
 
     def __call__(self, prompt, texts, roi):

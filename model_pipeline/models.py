@@ -78,7 +78,8 @@ class CLIPAnalyzer:
             logits_per_image = outputs.logits_per_image
             probs = logits_per_image.softmax(dim=1)
 
-        return probs
+        return probs.detach().cpu()
+
 
 ##################   IMAGE SEGMENTATION         ################### 
 
@@ -116,13 +117,13 @@ class SegmentModel:
         
         input_points, input_boxes = [input_points], [input_boxes]
                     
-        if input_points and input_boxes:    
+        if input_points[0] and input_boxes[0]:    
             inputs = self.processor(image_rgb, input_points=[input_points], input_boxes=[input_boxes], return_tensors="pt").to(self.device)
-        elif input_points:
+        elif input_points[0] and not input_boxes[0]:
             inputs = self.processor(image_rgb, input_points=input_points, return_tensors="pt").to(self.device)
-        elif input_boxes:
+        elif input_boxes[0] and not input_points[0]:
             inputs = self.processor(image_rgb, input_boxes=[input_boxes], return_tensors="pt").to(self.device)
-        else:
+        elif not input_points[0] and not input_boxes[0]:
             inputs = self.processor(image_rgb, return_tensors="pt").to(self.device)
         
 
@@ -130,10 +131,10 @@ class SegmentModel:
 
         inputs.pop("pixel_values", None)
         inputs.update({"image_embeddings": image_embeddings})
-
+        
         with torch.no_grad():
             outputs = self.model(**inputs)
 
         masks = self.processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
         
-        return masks[0], outputs.iou_scores
+        return masks[0].detach().cpu(), outputs.iou_scores.detach().cpu()

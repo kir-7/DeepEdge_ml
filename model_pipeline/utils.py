@@ -6,6 +6,8 @@ from shapely.geometry import Polygon
 from io import BytesIO
 from PIL import Image
 
+import base64
+
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
@@ -102,9 +104,12 @@ def show_masks_on_image(raw_image, masks, scores, return_pil=False):
     
     plt.show()
   
+
 def get_masked_area(image, masks):
     if len(masks.shape) == 4:
         masks = masks.squeeze()
+    if isinstance(image, np.ndarray):
+      image = Image.fromarray(image)
 
     images = []
 
@@ -114,7 +119,7 @@ def get_masked_area(image, masks):
 
       images.append(result)
     
-    return images   
+    return images  
 
 def masks_to_polygons(masks, scores, threshold=0.5):
 
@@ -157,3 +162,39 @@ def extract_pixels(image_rgb, masks):
         extracted_pixels.append(masked_pixels)
 
     return extracted_pixels
+
+
+def encode_images(images):
+
+  
+  def encode(image):
+    if isinstance(image, Image):
+      buffered = BytesIO()
+      image.save(buffered, format="JPEG")
+      base_64_encoded_image = base64.b64encode(buffered.getvalue())
+      return base_64_encoded_image
+    
+    else:
+      raise Exception("inputto encode_image should a PIL.Image object")
+
+  encoded_images = []
+
+  if isinstance(images, list):
+      for i in images:
+        encoded_images.append(encode(i))
+    
+      return encoded_images
+  
+  elif isinstance(images, Image):
+     return encode(images)
+  
+
+def decode_image(encoded_image):
+
+  try:
+      image = base64.b64decode(encoded_image, validate=True)
+      image = BytesIO(image)
+      image = Image,open(image)
+      return image
+  except Exception as e:
+    print(e)
