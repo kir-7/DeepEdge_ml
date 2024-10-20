@@ -3,7 +3,7 @@ import torch
 from diffusers import StableDiffusionPipeline
 from transformers import SamModel, SamProcessor, CLIPModel, CLIPProcessor
 
-import numpy as np
+import logging
 
 ################     STABLE DIFFUSION      ############
 
@@ -11,40 +11,73 @@ import numpy as np
 # https://colab.research.google.com/github/huggingface/notebooks/blob/main/diffusers/stable_diffusion.ipynb#scrollTo=G47gEbg9Z4sJ
 # refer above notebook for later use
 
-class StableDiffusion:    
-    def __init__(self, model=None, image_dimensions=(512, 512), num_inference_steps=50, seed=False, device='cpu') -> None:
-    
+class StableDiffusion:
+    def __init__(self, model = None, image_dimensions: tuple = (512, 512), 
+                 num_inference_steps: int = 50, seed: bool = False, device: str = 'cuda' if torch.cuda.is_available() else 'cpu') -> None:
         self.model = model
         self.dimensions = image_dimensions
-        self.num_inference_steps=num_inference_steps
+        self.num_inference_steps = num_inference_steps
         self.device = device
 
-        if model == None:
-            self.pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float16)  
-        else:
-            self.pipe = StableDiffusionPipeline.from_pretrained(model, torch_dtype=torch.float16)
-        
-        self.pipe.to(device)
+        try:
+            if model is None:
+                self.pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float16)
+            else:
+                self.pipe = StableDiffusionPipeline.from_pretrained(model, torch_dtype=torch.float16)
+            
+            self.pipe.to(self.device)
 
-        if seed:
-            self.generator = torch.Generator(device).manual_seed(1024)
-        else:
-            self.generator = torch.Generator(device)
+            if seed:
+                self.generator = torch.Generator(self.device).manual_seed(1024)
+            else:
+                self.generator = torch.Generator(self.device)
 
-    def generate(self, prompt, path=None):
+        except Exception as e:
+            logging.error(f"Error initializing StableDiffusion: {str(e)}")
+            raise
+
+    def generate(self, prompts, batch_size = 1, path = None) :
         
-        #  we might have more than one prompt which will generate a list of images for each prompt
-        
-        inference = self.pipe(prompt, height=self.dimensions[0], width=self.dimensions[1], generator=self.generator, num_inference_steps=self.num_inference_steps)
-        images = inference.images
-        nsfw_content_detected = any(inference.nsfw_content_detected)
-        if nsfw_content_detected:
-            print("NSFW content detected returing ...")
-            return None
-        if path:
-            for i, img in enumerate(images):
-                img.save(f"{path}/image_{i}.png")
-        return images
+        if isinstance(prompts,str):
+            prompts = [prompts]
+
+        results = []
+        try:
+            for i in range(0, len(prompts), batch_size):
+                batch_prompts = prompts[i:i+batch_size]
+                inference = self.pipe(batch_prompts, height=self.dimensions[0], width=self.dimensions[1], 
+                                      generator=self.generator, num_inference_steps=self.num_inference_steps)
+                
+                images = inference.images
+                nsfw_content_detected = inference.nsfw_content_detected
+
+                for img, nsfw in zip(images, nsfw_content_detected):
+                    if nsfw:
+                        logging.warning("NSFW content detected, skipping...")
+                        results.append(None)
+                    else:
+                        results.append(img)
+                        if path:
+                            img.save(f"{path}/image_{len(results)}.png")
+
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                logging.warning("GPU out of memory, falling back to CPU")
+                self.device = 'cpu'
+                self.pipe.to(self.device)
+                return self.generate(prompts, batch_size, path)
+            else:
+                logging.error(f"Error during generation: {str(e)}")
+                raise
+
+        return results
+
+    def __del__(self):
+        # Clean up resources
+        if hasattr(self, 'pipe'):
+            del self.pipe
+        torch.cuda.empty_cache()
+
 
 
 ##################       CLIP       ################
@@ -53,32 +86,47 @@ class StableDiffusion:
 
 
 
-#  you can include CLIP with flash attention which makes it faster on GPUs so need to properly implement in environments
+#  you can include CLIP with flash attention which makes it faster on GPUs so need to properly implement in environmentsimport torch
 class CLIPAnalyzer:
-    def __init__(self, model=None, processor=None, device="cpu"):
-
-        if not model:
-            self.model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-        else:
-            self.model = CLIPModel.from_pretrained(model).to(device)
-        if not processor:
-            self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        else:
-            self.processor = CLIPProcessor.from_pretrained(processor)
-        
+    def __init__(self, model=None, processor=None, device="cuda" if torch.cuda.is_available() else "cpu"):
         self.device = device
-    
+        model_name = model or "openai/clip-vit-base-patch32"
+        processor_name = processor or "openai/clip-vit-base-patch32"
+
+        try:
+            self.model = CLIPModel.from_pretrained(model_name).to(self.device)
+            self.processor = CLIPProcessor.from_pretrained(processor_name)
+        except Exception as e:
+            logging.error(f"Error initializing CLIP model: {str(e)}")
+            raise
+
     def analyze(self, image, texts):
-        
+        try:
+            inputs = self.processor(text=texts, images=image, return_tensors="pt", padding=True)
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                logits_per_image = outputs.logits_per_image
+                probs = logits_per_image.softmax(dim=1)
 
-        inputs = self.processor(text=texts, images=image, return_tensors="pt", padding=True).to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            logits_per_image = outputs.logits_per_image
-            probs = logits_per_image.softmax(dim=1)
+            return probs.detach().cpu().numpy()  # Convert to numpy array for easier handling
 
-        return probs.detach().cpu()
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                logging.warning("GPU out of memory, falling back to CPU")
+                self.device = 'cpu'
+                self.model.to(self.device)
+                return self.analyze(image, texts)
+            else:
+                logging.error(f"Error during CLIP analysis: {str(e)}")
+                raise
+
+    def __del__(self):
+        # Clean up resources
+        if hasattr(self, 'model'):
+            del self.model
+        torch.cuda.empty_cache()
 
 
 ##################   IMAGE SEGMENTATION         ################### 
@@ -88,53 +136,72 @@ class CLIPAnalyzer:
 # https://github.com/huggingface/notebooks/blob/main/examples/automatic_mask_generation.ipynb
 # use the above notebooks as it contains output segmentation clearing and better masking techniques can be used to properly save masks
 
+
 class SegmentModel:
-    def __init__(self, model_type=None, processor_type=None, device='cpu'):
-
+    def __init__(self, model_type = None, processor_type = None, device = 'cuda' if torch.cuda.is_available() else 'cpu'):
         self.device = device
+        model_name = model_type or "facebook/sam-vit-huge"
+        processor_name = processor_type or "facebook/sam-vit-huge"
 
-        if model_type == None:
-            self.model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
-        else:
-            self.model = SamModel.from_pretrained(model_type).to(device)
+        try:
+            self.model = SamModel.from_pretrained(model_name).to(self.device)
+            self.processor = SamProcessor.from_pretrained(processor_name)
+        except Exception as e:
+            logging.error(f"Error initializing SAM model: {str(e)}")
+            raise
 
-        if processor_type == None:
-            self.processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
-        else:
-            self.processor = SamProcessor.from_pretrained(processor_type)
+    def generate(self, image_rgb, roi= None):
+        try:
+            input_points, input_boxes = self._prepare_inputs(roi)
+            
+            inputs = self._process_inputs(image_rgb, input_points, input_boxes)
+            
+            with torch.no_grad():
+                image_embeddings = self.model.get_image_embeddings(inputs.pop("pixel_values"))
+                inputs.update({"image_embeddings": image_embeddings})
+                outputs = self.model(**inputs)
 
+            masks = self.processor.image_processor.post_process_masks(
+                outputs.pred_masks.cpu(), 
+                inputs["original_sizes"].cpu(), 
+                inputs["reshaped_input_sizes"].cpu()
+            )
+            
+            return masks[0].detach().cpu().numpy(), outputs.iou_scores.detach().cpu().numpy()
 
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                logging.warning("GPU out of memory, falling back to CPU")
+                self.device = 'cpu'
+                self.model.to(self.device)
+                return self.generate(image_rgb, roi)
+            else:
+                logging.error(f"Error during SAM generation: {str(e)}")
+                raise
 
-    def generate(self, image_rgb, roi=None):
-
+    def _prepare_inputs(self, roi = None):
         input_points, input_boxes = [], []
-        if roi != None :
+        if roi:
             for region in roi:
                 if len(region) == 4:
                     input_boxes.append(region)
                 else:
                     input_points.append(region)
-        
-        input_points, input_boxes = [input_points], [input_boxes]
-                    
-        if input_points[0] and input_boxes[0]:    
-            inputs = self.processor(image_rgb, input_points=[input_points], input_boxes=[input_boxes], return_tensors="pt").to(self.device)
-        elif input_points[0] and not input_boxes[0]:
-            inputs = self.processor(image_rgb, input_points=input_points, return_tensors="pt").to(self.device)
-        elif input_boxes[0] and not input_points[0]:
-            inputs = self.processor(image_rgb, input_boxes=[input_boxes], return_tensors="pt").to(self.device)
-        elif not input_points[0] and not input_boxes[0]:
-            inputs = self.processor(image_rgb, return_tensors="pt").to(self.device)
-        
+        return [input_points], [input_boxes]
 
-        image_embeddings = self.model.get_image_embeddings(inputs["pixel_values"])
-
-        inputs.pop("pixel_values", None)
-        inputs.update({"image_embeddings": image_embeddings})
+    def _process_inputs(self, image_rgb, input_points, input_boxes):
+        if input_points[0] and input_boxes[0]:
+            inputs = self.processor(image_rgb, input_points=input_points, input_boxes=input_boxes, return_tensors="pt")
+        elif input_points[0]:
+            inputs = self.processor(image_rgb, input_points=input_points, return_tensors="pt")
+        elif input_boxes[0]:
+            inputs = self.processor(image_rgb, input_boxes=input_boxes, return_tensors="pt")
+        else:
+            inputs = self.processor(image_rgb, return_tensors="pt")
         
-        with torch.no_grad():
-            outputs = self.model(**inputs)
+        return {k: v.to(self.device) for k, v in inputs.items()}
 
-        masks = self.processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
-        
-        return masks[0].detach().cpu(), outputs.iou_scores.detach().cpu()
+    def __del__(self):
+        if hasattr(self, 'model'):
+            del self.model
+        torch.cuda.empty_cache()

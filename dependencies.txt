@@ -8,6 +8,4 @@ $ pip install ftfy regex tqdm
 
 pip install numpy opencv-python shapely
 
-
-
-
+flask

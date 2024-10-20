@@ -1,8 +1,4 @@
-
 import torch
-from torch import nn
-import torchvision
-
 import numpy as np
 from PIL import Image
 
@@ -11,8 +7,7 @@ from model_pipeline.utils import masks_to_polygons, extract_pixels, get_masked_a
 
 from config import SAVE_PATH
 
-import base64
-from io import BytesIO
+import logging
 
 
 '''
@@ -44,28 +39,18 @@ Problems: 1. for SegmentModel it requires to return the mask as well as polygon,
                            
 '''
 
+
 class Pipeline:
     def __init__(self, diffusion=None, clip=None, segment=None, save_path=SAVE_PATH, device='cpu') -> None:
+        logging.info("Loading pretrained models from Hugging Face...")
         
-        print("loading pretrained models from huggingface...")
+        self.device = device if torch.cuda.is_available() else 'cpu'
+        
+        self.diffusion = diffusion or StableDiffusion(device=self.device)
+        self.clip = clip or CLIPAnalyzer(device=self.device)
+        self.segment = segment or SegmentModel(device=self.device)
 
-        if not diffusion:
-            self.diffusion = StableDiffusion(device=device)
-        else:
-            self.diffusion = diffusion
-        if not clip:
-            self.clip = CLIPAnalyzer(device=device)
-        else:
-            self.clip = clip
-        if not segment:
-            self.segment = SegmentModel(device=device)
-        else:
-            self.segment = segment
-
-        print(end='\r')
-        print("models loaded.")
-
-        self.device = device
+        logging.info("Models loaded.")
         self.save = save_path
 
         self.image = None
@@ -74,51 +59,71 @@ class Pipeline:
         self.masks = None
 
     def generate(self, prompt):
+        if not isinstance(prompt, str) or not prompt:
+            raise ValueError("Invalid prompt. It should be a non-empty string.")
         
-        self.image = self.diffusion.generate(prompt)
-        
-        encoded_image = encode_images(self.image)
+        try:
+            self.image = self.diffusion.generate(prompt)
+        except Exception as e:
+            logging.error(f"Error generating image: {e}")
+            return None
 
-        self.image = np.array(self.image)
-
-        return encoded_image
+        return encode_images(self.image)
 
     def analyze_clip(self, image, texts):
-        
         if isinstance(image, Image.Image):
             image = np.array(image)
         
-        assert isinstance(image, np.ndarray) 
+        assert isinstance(image, np.ndarray)
 
-        if isinstance(texts, str):
-            self.probs = self.clip.analyze(image, [texts])
-
-        if isinstance(texts, list) and len(texts)>0:
-            self.probs = self.clip.analyze(image, texts)
-
-        return torch.max(self.probs), self.probs
+        try:
+            if isinstance(texts, str):
+                self.probs = self.clip.analyze(image, [texts])
+            elif isinstance(texts, list) and len(texts) > 0:
+                self.probs = self.clip.analyze(image, texts)
+            else:
+                raise ValueError("Texts should be a string or a non-empty list of strings.")
+        except Exception as e:
+            logging.error(f"Error analyzing with CLIP: {e}")
+            return None, None
+        
+        return self.probs.max(), self.probs
 
     def analyze_sam(self, image, roi):
-
         if isinstance(image, Image.Image):
             image = np.array(image)
         
-        assert isinstance(image, np.ndarray) 
+        assert isinstance(image, np.ndarray)
 
-        self.masks, self.iou_scores = self.segment.generate(image, roi)
-
-        masked_images = get_masked_area(image, np.array(self.masks))
-        encoded_masked_images = encode_images(masked_images)
-
-        return self.mask, self.iou_scores, encoded_masked_images
-
+        try:
+            self.masks, self.iou_scores = self.segment.generate(image, roi)
+            masked_images = get_masked_area(image, np.array(self.masks))
+            encoded_masked_images = encode_images(masked_images)
+        except Exception as e:
+            logging.error(f"Error analyzing with SAM: {e}")
+            return None, None, None
+        
+        return self.masks, self.iou_scores, encoded_masked_images
 
     def __call__(self, prompt, texts, roi):
-
         image = self.generate(prompt)
-
+        if image is None:
+            return None
+        
         max_prob, probs = self.analyze_clip(image, texts)
-
+        if probs is None:
+            return None
+        
         masks, iou_scores, polygons = self.analyze_sam(image, roi)
-
         return image, probs, masks, iou_scores, polygons
+
+    def __del__(self):
+        if hasattr(self, "diffusion"):
+            del self.diffusion
+        if hasattr(self, "clip"):
+            del self.clip
+        
+        if hasattr(self, "segment"):
+            del self.segment
+        
+        torch.cuda.empty_cache()

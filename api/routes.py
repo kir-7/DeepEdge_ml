@@ -10,6 +10,13 @@ api = Blueprint('api', __name__)
 
 pipeline = Pipeline()
 
+@api.route("/", methods=['GET'])
+def home():
+
+    return '''<p>This is the api for a Machine Learning Pipeline! 
+                    /generate is a post method to generate images 
+                    /analyze is a post method to analyze the generated images.</p>'''
+
 @api.route('/generate', methods=['POST'])
 def generate():
 

@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-from shapely.geometry import Polygon
 
 from io import BytesIO
 from PIL import Image
@@ -121,6 +120,7 @@ def get_masked_area(image, masks):
     
     return images  
 
+'''
 def masks_to_polygons(masks, scores, threshold=0.5):
 
     if len(masks.shape) == 4:
@@ -147,6 +147,8 @@ def masks_to_polygons(masks, scores, threshold=0.5):
                 polygons.append(polygon)
 
     return polygons
+
+    '''
 
 def extract_pixels(image_rgb, masks):
     if len(masks.shape) == 4:
