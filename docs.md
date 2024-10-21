@@ -6,12 +6,12 @@ my_pipeline/
 │   ├── app.py             # Main API application
 │   └── routes.py          # API route definitions
 │
-├── models/
+├── model_pipeline/
 │   ├── __init__.py
 │   ├── models.py          # Contains Stable Diffusion, CLIP, and SAM classes
-│   ├── model_pipeline.py   # Contains the Pipeline class that integrates the models
-│   └── utils.py            # contains all the utility functions
-│   
+│   ├── pipeline.py        # Contains the Pipeline class that integrates the models
+│   └── utils.py           # contains all the utility functions
+│  
 ├── requirements.txt         # Required Python packages
 ├── config.py                # Configuration settings (e.g., model paths, device settings)
 ├── main.py                  # Entry point for running the pipeline (optional)

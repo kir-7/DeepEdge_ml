@@ -170,14 +170,14 @@ def encode_images(images):
 
   
   def encode(image):
-    if isinstance(image, Image):
+    if isinstance(image, Image.Image):
       buffered = BytesIO()
       image.save(buffered, format="JPEG")
       base_64_encoded_image = base64.b64encode(buffered.getvalue())
       return base_64_encoded_image
     
     else:
-      raise Exception("inputto encode_image should a PIL.Image object")
+      raise Exception("input to encode_image should a PIL.Image object")
 
   encoded_images = []
 
@@ -187,16 +187,28 @@ def encode_images(images):
     
       return encoded_images
   
-  elif isinstance(images, Image):
+  elif isinstance(images, Image.Image):
      return encode(images)
   
 
 def decode_image(encoded_image):
-
-  try:
-      image = base64.b64decode(encoded_image, validate=True)
-      image = BytesIO(image)
-      image = Image,open(image)
-      return image
-  except Exception as e:
-    print(e)
+    if isinstance(encoded_image, list):
+        images = []
+        for im in encoded_image:
+          try:
+              image = base64.b64decode(im, validate=True)
+              image = BytesIO(image)
+              image = Image.open(image)
+              images.append(image)
+          except Exception as e:
+            print(e)
+        return images
+    if isinstance(encoded_image, str):
+          try:
+              image = base64.b64decode(encoded_image, validate=True)
+              image = BytesIO(image)
+              image = Image.open(image)
+              return image
+          except Exception as e:
+            print(e)
+       

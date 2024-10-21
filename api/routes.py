@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from model_pipeline.pipeline import Pipeline
 from model_pipeline.utils import encode_images, decode_image
 
-import random
+import uuid
 
 api = Blueprint('api', __name__)
 
@@ -23,10 +23,13 @@ def generate():
     data = request.json
     prompt = data.get('prompt')
 
+    if not prompt or not isinstance(prompt, str) or not isinstance(prompt, list):
+        return jsonify({"error": "Invalid prompt. It should be a non-empty string or non empty list of strings"}), 400
+
     encoded_image = pipeline.generate(prompt)
 
     response = {
-        "request_id": random.randint(10000, 100000000),  # need to create a db that can store each request to keep track
+        "request_id": str(uuid.uuid4()),                    # need to create a db that can store each request to keep track
         "generated_image": encoded_image,
     }
 
@@ -47,7 +50,7 @@ def analyze():
     masks, iou_scores, polygons = pipeline.analyze_sam(decoded_image, roi)
     
     response = {
-        "request_id": random.randint(10000, 1000000),  # again keep a db to track these reqests
+        "request_id": str(uuid.uuid4()),             # again keep a db to track these reqests
         "image":image,
         "clip_analysis": {
             "concepts":texts,
