@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-# from model_pipeline.pipeline import Pipeline
+from model_pipeline.pipeline import Pipeline
 from model_pipeline.utils import encode_images, decode_image
 
 import uuid
@@ -8,7 +8,7 @@ api = Blueprint('api', __name__)
 
 # Initialize models
 
-pipeline = None
+pipeline = Pipeline()
 
 @api.route("/", methods=['GET'])
 def home():

@@ -41,7 +41,7 @@ Problems: 1. for SegmentModel it requires to return the mask as well as polygon,
 
 
 class Pipeline:
-    def __init__(self, diffusion=None, clip=None, segment=None, save_path=SAVE_PATH, device='cpu') -> None:
+    def __init__(self, diffusion=None, clip=None, segment=None, save_path=SAVE_PATH, device='cuda') -> None:
         logging.info("Loading pretrained models from Hugging Face...")
         
         self.device = device if torch.cuda.is_available() else 'cpu'
