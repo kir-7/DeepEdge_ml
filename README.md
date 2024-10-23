@@ -103,8 +103,15 @@ pip install -r requirements.txt
 To utilize a GPU for model inference:
 
 * Ensure you have NVIDIA GPU drivers installed.
-* Install the CUDA toolkit and cuDNN library compatible with your PyTorch version. Refer to PyTorch installation   guide for details.
-* The models will automatically utilize the GPU if available thorugh torch.cuda.is_available()
+
+* Install the CUDA toolkit and cuDNN library compatible with your PyTorch version. Refer to PyTorch installation guide for details.
+* You can get your cuda version through the command
+```bash
+nvidia-smi
+```
+* Using the cuda version you can install the cuda toolkit that. You can install the cuda toolkit through anaconda follow this [link](https://medium.com/@leennewlife/how-to-setup-pytorch-with-cuda-in-windows-11-635dfa56724b) for instructions to install cuda toolkit and compatible pytorch gpu support 
+
+* Once the gpu support is installed The models will automatically utilize the GPU if available thorugh torch.cuda.is_available()
 * Note that since heavy models are used you would need minimum of 8GB of GPU and atleast a Tesla T4 GPU is recommended  
 
 ## CPU Setup
