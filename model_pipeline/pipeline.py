@@ -87,7 +87,7 @@ class Pipeline:
             logging.error(f"Error analyzing with CLIP: {e}")
             return None, None
         
-        return self.probs.max(), self.probs
+        return texts[np.argmax(self.probs)], self.probs
 
     def analyze_sam(self, image, roi):
         if isinstance(image, Image.Image):
