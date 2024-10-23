@@ -8,26 +8,6 @@ This project implements a comprehensive pipeline for generating images from text
 2. **Image Analysis**: Once the image is generated, users can send it to the `/analyze` endpoint for analysis. The system performs a CLIP analysis to identify concepts in the image and uses SAM2 for instance segmentation.
 3. **Responses**: The API returns the generated image and analysis results in a structured JSON format.
 
-## Repository Structure
-
-my_pipeline/
-│
-├── api/
-│   ├── __init__.py
-│   ├── app.py             # Main API application
-│   └── routes.py          # API route definitions
-│
-├── model_pipeline/
-│   ├── __init__.py
-│   ├── models.py          # Contains Stable Diffusion, CLIP, and SAM classes
-│   ├── pipeline.py        # Contains the Pipeline class that integrates the models
-│   └── utils.py           # contains all the utility functions
-│  
-├── requirements.txt         # Required Python packages
-├── config.py                # Configuration settings (e.g., model paths, device settings)
-├── main.py                  # Entry point for running the pipeline (optional)
-└── README.md                # Project documentation
-├── test.py                  # a file to test the functionality of the api 
 
 ## API Documentation
 
