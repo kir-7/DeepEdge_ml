@@ -1,3 +1,3 @@
 import os
 
-SAVE_PATH = os.path.join(os.getcwd, "images")
+SAVE_PATH = os.path.join(os.getcwd(), "images")
