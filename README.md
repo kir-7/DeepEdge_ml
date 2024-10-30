@@ -26,10 +26,10 @@ project/
 │   ├── pipeline.py     # Core pipeline implementation
 │   ├── models.py       # Model configurations
 │   └── utils.py        # Utility functions
-├── tests/
-│   └── test.py         # API testing script
+|
 ├── requirements.txt    # Project dependencies
-└── README.md          # Project documentation
+|── README.md           # Project documentation
+└── test.py             # a file to send example requests to the api
 ```
 
 ### Project Flow
