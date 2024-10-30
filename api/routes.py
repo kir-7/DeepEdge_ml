@@ -39,6 +39,62 @@ def generate():
 
     return jsonify(response)
 
+@api.route("/adv/generate", methods=["POST"])
+def adv_generate():
+
+    data = request.json
+    prompt = data.get(prompt)
+
+    if not prompt or not (isinstance(prompt, str) or isinstance(prompt, list)):
+        return jsonify({"error": "Invalid prompt. It should be a non-empty string or non empty list of strings"}), 400
+    
+    if pipeline:
+        encoded_image = pipeline.generate(prompt)
+    else:
+        encoded_image = "Dummy_encoded_image"
+    
+    if encoded_image == "Dummy_encoded_image":
+        return jsonify({"error":"Pipeline has not been initiated on server side."})
+
+    image = decode_image(encoded_image)
+
+    texts = data.get("texts")
+    roi = data.get('roi')
+
+    if pipeline:
+        max_confidence_text, confidence_scores = pipeline.analyze_clip(image, texts)   # returns the confidence scores
+        masks, iou_scores, polygons = pipeline.analyze_sam(image, roi)
+    else:
+        max_confidence_text, confidence_scores =  None, None
+        masks, iou_scores, polygons = None, None, None
+    
+    if any(True if item == None else False for item in (max_confidence_text, confidence_scores, masks, iou_scores, polygons)):
+        return jsonify({"error":"Pipeline has not been properly initialized on server side."})
+    
+    
+    response = {
+                "request_id":str(uuid.uuid4()),
+                "generated_image":encoded_image,
+                "clip_analysis":{
+                    "all_concepts":texts,
+                    "all_confidence_scores":confidence_scores,
+                    "global_confident_concept":max_confidence_text
+                },
+                "segmentation":{
+                    "masks":masks,
+                    "iou_scores":iou_scores,
+                    "polygons":polygons,
+                    "segmented_regions":[{
+                        "request_id":str(uuid.uuid4()),
+                        "clip_analysis":{i:j for i, j in zip(("concepts", "confidence_scores", "max_confident_concept"), (texts, )+pipeline.analyze_clip(polygon, texts))},
+                        "polygon":polygon,
+                    } for polygon in polygons]
+                }
+    }
+
+    return jsonify(response)
+
+
 @api.route('/analyze', methods=['POST'])
 def analyze():
     data = request.json
